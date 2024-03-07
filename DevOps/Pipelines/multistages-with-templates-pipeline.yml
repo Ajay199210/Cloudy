@@ -1,0 +1,167 @@
+# Multistages pipeline with templates
+
+trigger:
+- main
+
+variables:
+  buildConfiguration: 'Release'
+  serviceConnection : 'sc-azure'
+  artifactName: 'drop'
+
+stages:
+#--------------------#
+# Intégration continue
+#--------------------#
+- stage : 'Build' 
+  displayName: 'Build et exécution des tests'
+  jobs:
+  - template: Templates/build-template.yml
+    parameters:
+      buildConfiguration: $(buildConfiguration)
+      artifactName: $(artifactName)
+
+#-------------------------------------------------------#
+# Déploiement dans l'environnement de développement (Dev)
+#-------------------------------------------------------#
+
+# API emplois (Dev)
+- stage : 'DeployToDev_api_emplois' 
+  displayName: "Déploiment en Dev de l'API - Offres d'emplois"
+  dependsOn: 'Build'
+  jobs:
+  - template: Templates/deploy-template.yml
+    parameters:
+      environment: 'Dev'
+      artifactName: $(artifactName)
+      serviceConnection: $(serviceConnection)
+      webAppName: 'webapp-emplois-2m4f6tmpaivpm'
+      projectPackageZipName: 'ModernRecrut.Emplois.API'
+
+# API favoris (Dev)
+- stage : 'DeployToDev_api_favoris' 
+  displayName: "Déploiement en Dev de l'API - Favoris "
+  dependsOn: 'Build'
+  jobs:
+  - template: Templates/deploy-template.yml
+    parameters:
+      environment: 'Dev'
+      artifactName: $(artifactName)
+      serviceConnection: $(serviceConnection)
+      webAppName: 'webapp-favoris-2m4f6tmpaivpm'
+      projectPackageZipName: 'ModernRecrut.Favoris.API'
+
+# API documents (Dev)
+- stage : 'DeployToDev_api_documents' 
+  displayName: "Déploiment en Dev de l'API - Documents"
+  dependsOn: 'Build'
+  jobs:
+  - template: Templates/deploy-template.yml
+    parameters:
+      environment: 'Dev'
+      artifactName: $(artifactName)
+      serviceConnection: $(serviceConnection)
+      webAppName: 'webapp-documents-2m4f6tmpaivpm'
+      projectPackageZipName: 'ModernRecrut.Documents.API'
+
+# API postulations (Dev)
+- stage : 'DeployToDev_api_postulations' 
+  displayName: "Déploiment en Dev de l'API - Postulations"
+  dependsOn: 'Build'
+  jobs:
+  - template: Templates/deploy-template.yml
+    parameters:
+      environment: 'Dev'
+      artifactName: $(artifactName)
+      serviceConnection: $(serviceConnection)
+      webAppName: 'webapp-postulations-2m4f6tmpaivpm'
+      projectPackageZipName: 'ModernRecrut.Postulation.API'
+
+# API ModernRecrut MVC (Dev)
+- stage : 'DeployToDev_ModernRecrut' 
+  displayName: 'Déploiment en Dev de ModernRecrut'
+  dependsOn: # exécute ce stage après l'exécution en succès des stages précédents des API de Dev
+    - 'DeployToDev_api_emplois'
+    - 'DeployToDev_api_favoris'
+    - 'DeployToDev_api_documents'
+    - 'DeployToDev_api_postulations'
+  jobs:
+  - template: Templates/deploy-template.yml
+    parameters:
+      environment: 'Dev'
+      artifactName: $(artifactName)
+      serviceConnection: $(serviceConnection)
+      webAppName: 'webapp-mvc-2m4f6tmpaivpm'
+      projectPackageZipName: 'ModernRecrut.MVC'
+
+#-----------------------------------------------------#
+# Déploiement dans l'environnement de production (Prod)
+#-----------------------------------------------------#
+
+# API emplois (Prod)
+- stage : 'DeployToProd_api_emplois' 
+  displayName: "Déploiment en Prod de l'API - Offres d'emplois"
+  dependsOn: 'DeployToDev_ModernRecrut'
+  jobs:
+  - template: Templates/deploy-template.yml
+    parameters:
+      environment: 'Prod'
+      artifactName: $(artifactName)
+      serviceConnection: $(serviceConnection)
+      webAppName: 'webapp-emplois-k24jal56f2lnw'
+      projectPackageZipName: 'ModernRecrut.Emplois.API'
+
+# API favoris (Prod)
+- stage : 'DeployToProd_api_favoris' 
+  displayName:  "Déploiment en Prod de l'API - Favoris"
+  dependsOn: 'DeployToDev_ModernRecrut'
+  jobs:
+  - template: Templates/deploy-template.yml
+    parameters:
+      environment: 'Prod'
+      artifactName: $(artifactName)
+      serviceConnection: $(serviceConnection)
+      webAppName: 'webapp-favoris-k24jal56f2lnw'
+      projectPackageZipName: 'ModernRecrut.Favoris.API'
+
+# API documents (Prod)
+- stage : 'DeployToProd_api_documents' 
+  displayName: "Déploiment en Prod de l'API - Documents"
+  dependsOn: 'DeployToDev_ModernRecrut'
+  jobs:
+  - template: Templates/deploy-template.yml
+    parameters:
+      environment: 'Prod'
+      artifactName: $(artifactName)
+      serviceConnection: $(serviceConnection)
+      webAppName: 'webapp-documents-k24jal56f2lnw'
+      projectPackageZipName: 'ModernRecrut.Documents.API'
+
+# API postulations (Prod)
+- stage : 'DeployToProd_api_postulations' 
+  displayName: "Déploiment en Prod de l'API - postulations"
+  dependsOn: 'DeployToDev_ModernRecrut'
+  jobs:
+  - template: Templates/deploy-template.yml
+    parameters:
+      environment: 'Prod'
+      artifactName: $(artifactName)
+      serviceConnection: $(serviceConnection)
+      webAppName: 'webapp-postulations-k24jal56f2lnw'
+      projectPackageZipName: 'ModernRecrut.Postulation.API'
+
+# API ModernRecrut MVC (Prod)
+- stage : 'DeployToProd_ModernRecrut' 
+  displayName: "Déploiment en Prod de ModernRecrut"
+  dependsOn: # exécute ce stage après l'exécution en succès des stages précédents des API de Prod
+    - 'DeployToProd_api_emplois'
+    - 'DeployToProd_api_favoris'
+    - 'DeployToProd_api_documents'
+    - 'DeployToProd_api_postulations'
+  jobs:
+  - template: Templates/deploy-template.yml
+    parameters:
+      environment: 'Prod'
+      artifactName: $(artifactName)
+      serviceConnection: $(serviceConnection)
+      webAppName: 'webapp-mvc-k24jal56f2lnw'
+      projectPackageZipName: 'ModernRecrut.MVC'

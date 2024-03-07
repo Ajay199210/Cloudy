@@ -1,0 +1,29 @@
+parameters:
+    environment: ''
+    artifactName: ''
+    serviceConnection: ''
+    webAppName: 'test101'
+    projectPackageZipName: ''
+
+jobs:
+- deployment : 'WebDeploy'
+  pool: 
+    vmImage: 'ubuntu-latest'
+  environment: '${{ parameters.environment }}'
+  strategy:
+        runOnce:
+         deploy:
+           steps:
+           - task: DownloadBuildArtifacts@0
+             inputs:
+               buildType: 'current'
+               downloadType: 'single'
+               artifactName: '${{ parameters.artifactName }}'
+               downloadPath: '$(System.ArtifactsDirectory)'
+           - task: AzureRmWebAppDeployment@4
+             inputs:
+              ConnectionType: 'AzureRM'
+              azureSubscription: '${{ parameters.serviceConnection }}'
+              appType: 'webApp'
+              WebAppName: '${{ parameters.webAppName }}'
+              package: '$(Build.ArtifactStagingDirectory)/**/${{ parameters.projectPackageZipName }}.zip'

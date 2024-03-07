@@ -1,0 +1,54 @@
+# IaC Pipeline
+
+trigger:
+- none
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  location: 'canadacentral'
+  templateFile: '**/main.bicep'
+  serviceConnection: 'sc-azure'
+
+stages:
+-  stage: 'IacDev'
+   jobs:
+   - deployment: 'DeployDev'
+     environment: 'Dev' # environnement va être ajouté s'il n'existe pas
+   - job: 'Deployment'
+     
+     variables: 
+      resourceGroupName: 'rg-modernrecrut-dev'
+      webAppName: 'modernrecrut-dev'
+    
+     steps:
+      - task: AzureCLI@2
+        inputs:
+          azureSubscription: $(serviceConnection)
+          scriptType: 'bash'
+          scriptLocation: 'inlineScript'
+          inlineScript: |
+            az --version
+            az group create --name $(resourceGroupName) --location $(location)
+            az deployment group create --resource-group $(resourceGroupName) --template-file $(templateFile)
+
+-  stage: 'IacProd'
+   jobs:
+   - deployment: 'DeployProd'
+     environment: 'Prod'
+   - job: 'Deployment'
+     variables: 
+      resourceGroupName: 'rg-modernrecrut-prod'
+      webAppName: 'modernrecrut-prod'
+
+     steps:
+      - task: AzureCLI@2
+        inputs:
+          azureSubscription: $(serviceConnection)
+          scriptType: 'bash'
+          scriptLocation: 'inlineScript'
+          inlineScript: |
+            az --version
+            az group create --name $(resourceGroupName) --location $(location) 
+            az deployment group create --resource-group $(resourceGroupName) --template-file $(templateFile)

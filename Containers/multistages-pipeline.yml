@@ -1,0 +1,53 @@
+# Multistages pipeline for deploying to ACI (Azure Container Instance)
+
+trigger:
+- none #main
+
+variables:
+  serviceConnection : 'sc-azure'
+  appName: 'api-emplois'
+  containerName: 'acrtp3ex4'
+  containerRegistry: 'acrtp3ex4.azurecr.io'
+  acrServiceConnection : 'sc-container-registry'
+  imageRepository: 'modernrecrutemploisapi'
+  dockerfilePath: '**/Dockerfile'
+  rg: 'rg-tp3-ex4'
+  tag: '$(Build.BuildId)'
+
+# Build Stage
+stages:
+- stage : 'Build' 
+  displayName:  'Génération et push image'
+  pool:
+    vmImage: 'ubuntu-latest'
+  jobs:
+    - job : 'Build'
+      steps:
+      - task: Docker@2
+        inputs:
+          containerRegistry: '$(acrServiceConnection)'
+          repository: '$(imageRepository)'
+          command: 'buildAndPush'
+          Dockerfile: '$(dockerfilePath)'
+          buildContext: '$(Build.SourcesDirectory)'
+        displayName: 'Génération et push image dans registre de conteneurs'
+
+# ACI Deployment Stage
+- stage : 'DeployToACI' 
+  displayName:  'Déploiment dans ACI'
+  pool:
+    vmImage: 'ubuntu-latest'
+  dependsOn: 'Build'
+  variables:
+    username: 'acrtp3ex4'
+  jobs:
+    - job:
+      steps:
+      - task: AzureCLI@2
+        inputs:
+          azureSubscription: 'sc-azure'
+          scriptType: 'bash'
+          scriptLocation: 'inlineScript'
+          inlineScript: |
+            az container create --resource-group $(rg) --name $(containerName) --image '$(containerRegistry)/$(imageRepository):$(tag)' --cpu 1 --memory 1 --registry-login-server $(containerRegistry) --registry-username $(username) --registry-password $(password) --ip-address Public --dns-name-label aci-api-emplois101 --ports 80
+        displayName: 'Déploiement sur Azure Container Instance'

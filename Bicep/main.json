@@ -1,0 +1,507 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.25.3.34343",
+      "templateHash": "3490774930615706344"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "La location (région) des ressources à déployer"
+      }
+    },
+    "serverName": {
+      "type": "string",
+      "metadata": {
+        "description": "Le nom du serveur SQL hébérgant les deux bases de données"
+      }
+    },
+    "dbUser": {
+      "type": "string",
+      "metadata": {
+        "description": "Le nom de l'utilisateur accédant au serveur (BD) SQL"
+      }
+    },
+    "dbPassword": {
+      "type": "securestring",
+      "minLength": 10,
+      "maxLength": 20,
+      "metadata": {
+        "description": "Le mot de passe de l'utilisateur"
+      }
+    },
+    "stgAcctName": {
+      "type": "string",
+      "metadata": {
+        "description": "Le nom du compte de stockage"
+      }
+    },
+    "blobContName": {
+      "type": "string",
+      "defaultValue": "documents",
+      "metadata": {
+        "description": "Le nom de conteneur blob"
+      }
+    }
+  },
+  "variables": {
+    "webApps": [
+      {
+        "name": "mvc",
+        "sku": "S1",
+        "isProduction": true
+      },
+      {
+        "name": "postulations",
+        "sku": "B1",
+        "isProduction": false
+      },
+      {
+        "name": "emplois",
+        "sku": "F1",
+        "isProduction": false
+      },
+      {
+        "name": "favoris",
+        "sku": "F1",
+        "isProduction": false
+      },
+      {
+        "name": "documents",
+        "sku": "F1",
+        "isProduction": false
+      }
+    ],
+    "dbs": [
+      {
+        "name": "emplois",
+        "storageSku": "Basic"
+      },
+      {
+        "name": "postulations",
+        "storageSku": "Standard"
+      }
+    ]
+  },
+  "resources": [
+    {
+      "copy": {
+        "name": "webAppsModule",
+        "count": "[length(variables('webApps'))]"
+      },
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "[format('webApp-{0}', variables('webApps')[copyIndex()].name)]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "webAppName": {
+            "value": "[variables('webApps')[copyIndex()].name]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "sku": {
+            "value": "[variables('webApps')[copyIndex()].sku]"
+          },
+          "isProduction": {
+            "value": "[variables('webApps')[copyIndex()].isProduction]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.25.3.34343",
+              "templateHash": "16957009389568887610"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "defaultValue": "canadacentral",
+              "allowedValues": [
+                "canadacentral",
+                "canadaeast"
+              ],
+              "metadata": {
+                "description": "La région du déploiement"
+              }
+            },
+            "webAppName": {
+              "type": "string",
+              "metadata": {
+                "description": "Le nom de l'application web à déployer"
+              }
+            },
+            "isProduction": {
+              "type": "bool",
+              "metadata": {
+                "description": "Spécifier l'environment de l'application (ASPNETCORE_ENVIRONMENT)"
+              }
+            },
+            "sku": {
+              "type": "string",
+              "defaultValue": "F1",
+              "allowedValues": [
+                "F1",
+                "B1",
+                "S1"
+              ],
+              "metadata": {
+                "description": "Le niveau tarifaire"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Web/serverfarms",
+              "apiVersion": "2023-01-01",
+              "name": "[format('sp-{0}', parameters('webAppName'))]",
+              "location": "[parameters('location')]",
+              "tags": {
+                "Application": "[parameters('webAppName')]"
+              },
+              "sku": {
+                "name": "[parameters('sku')]"
+              }
+            },
+            {
+              "type": "Microsoft.Web/sites",
+              "apiVersion": "2023-01-01",
+              "name": "[format('webapp-{0}-{1}', parameters('webAppName'), uniqueString(resourceGroup().id))]",
+              "location": "[parameters('location')]",
+              "tags": {
+                "Application": "[parameters('webAppName')]"
+              },
+              "properties": {
+                "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', format('sp-{0}', parameters('webAppName')))]",
+                "siteConfig": {
+                  "appSettings": [
+                    {
+                      "name": "ASPNETCORE_ENVIRONMENT",
+                      "value": "[if(parameters('isProduction'), 'Production', 'Development')]"
+                    }
+                  ]
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/serverfarms', format('sp-{0}', parameters('webAppName')))]"
+              ]
+            },
+            {
+              "condition": "[equals(parameters('sku'), 'S1')]",
+              "type": "Microsoft.Web/sites/slots",
+              "apiVersion": "2023-01-01",
+              "name": "[format('{0}/{1}', format('webapp-{0}-{1}', parameters('webAppName'), uniqueString(resourceGroup().id)), 'staging')]",
+              "location": "[parameters('location')]",
+              "tags": {
+                "Application": "[parameters('webAppName')]"
+              },
+              "properties": {
+                "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', format('sp-{0}', parameters('webAppName')))]",
+                "siteConfig": {
+                  "appSettings": [
+                    {
+                      "name": "ASPNETCORE_ENVIRONMENT",
+                      "value": "Staging"
+                    }
+                  ]
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/serverfarms', format('sp-{0}', parameters('webAppName')))]",
+                "[resourceId('Microsoft.Web/sites', format('webapp-{0}-{1}', parameters('webAppName'), uniqueString(resourceGroup().id)))]"
+              ]
+            },
+            {
+              "condition": "[equals(parameters('sku'), 'S1')]",
+              "type": "Microsoft.Insights/autoscalesettings",
+              "apiVersion": "2022-10-01",
+              "name": "[format('{0}-auto-scale', format('sp-{0}', parameters('webAppName')))]",
+              "location": "[parameters('location')]",
+              "tags": {
+                "Application": "[parameters('webAppName')]"
+              },
+              "properties": {
+                "enabled": true,
+                "profiles": [
+                  {
+                    "name": "Condition de mise à l'échelle",
+                    "capacity": {
+                      "maximum": "10",
+                      "default": "1",
+                      "minimum": "1"
+                    },
+                    "rules": [
+                      {
+                        "scaleAction": {
+                          "type": "ChangeCount",
+                          "direction": "Increase",
+                          "cooldown": "PT5M",
+                          "value": "1"
+                        },
+                        "metricTrigger": {
+                          "metricName": "CpuPercentage",
+                          "operator": "GreaterThan",
+                          "timeAggregation": "Average",
+                          "threshold": 80,
+                          "metricResourceUri": "[resourceId('Microsoft.Web/serverfarms', format('sp-{0}', parameters('webAppName')))]",
+                          "timeWindow": "PT10M",
+                          "timeGrain": "PT1M",
+                          "statistic": "Average"
+                        }
+                      },
+                      {
+                        "scaleAction": {
+                          "type": "ChangeCount",
+                          "direction": "Decrease",
+                          "cooldown": "PT5M",
+                          "value": "1"
+                        },
+                        "metricTrigger": {
+                          "metricName": "CpuPercentage",
+                          "operator": "LessThan",
+                          "timeAggregation": "Average",
+                          "threshold": 45,
+                          "metricResourceUri": "[resourceId('Microsoft.Web/serverfarms', format('sp-{0}', parameters('webAppName')))]",
+                          "timeWindow": "PT10M",
+                          "timeGrain": "PT1M",
+                          "statistic": "Average"
+                        }
+                      }
+                    ]
+                  }
+                ],
+                "targetResourceUri": "[resourceId('Microsoft.Web/serverfarms', format('sp-{0}', parameters('webAppName')))]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/serverfarms', format('sp-{0}', parameters('webAppName')))]"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "databases",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "serverName": {
+            "value": "[parameters('serverName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "databases": {
+            "value": "[variables('dbs')]"
+          },
+          "dbUser": {
+            "value": "[parameters('dbUser')]"
+          },
+          "dbPassword": {
+            "value": "[parameters('dbPassword')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.25.3.34343",
+              "templateHash": "8488460470103535351"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "allowedValues": [
+                "canadacentral",
+                "canadaeast"
+              ],
+              "metadata": {
+                "description": "La région du déploiement"
+              }
+            },
+            "serverName": {
+              "type": "string",
+              "metadata": {
+                "description": "Le nom su serveur SQL"
+              }
+            },
+            "databases": {
+              "type": "array",
+              "metadata": {
+                "description": "La liste des objets (propriétés : name et sku) pour les bases de données"
+              }
+            },
+            "dbUser": {
+              "type": "string",
+              "metadata": {
+                "description": "Le nom de l'utilisateur pour accéder aux données"
+              }
+            },
+            "dbPassword": {
+              "type": "securestring",
+              "minLength": 10,
+              "maxLength": 20,
+              "metadata": {
+                "description": "Le mot de passe de l'utilisateur"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Sql/servers",
+              "apiVersion": "2021-11-01",
+              "name": "[format('srv-{0}', parameters('serverName'))]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "administratorLogin": "[parameters('dbUser')]",
+                "administratorLoginPassword": "[parameters('dbPassword')]",
+                "version": "12.0"
+              }
+            },
+            {
+              "copy": {
+                "name": "sqlDb",
+                "count": "[length(parameters('databases'))]"
+              },
+              "type": "Microsoft.Sql/servers/databases",
+              "apiVersion": "2021-11-01",
+              "name": "[format('{0}/{1}', format('srv-{0}', parameters('serverName')), format('db-{0}', parameters('databases')[copyIndex()].name))]",
+              "location": "[parameters('location')]",
+              "sku": {
+                "name": "[parameters('databases')[copyIndex()].storageSku]",
+                "tier": "[parameters('databases')[copyIndex()].storageSku]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Sql/servers', format('srv-{0}', parameters('serverName')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Sql/servers/firewallRules",
+              "apiVersion": "2023-05-01-preview",
+              "name": "[format('{0}/{1}', format('srv-{0}', parameters('serverName')), 'All')]",
+              "properties": {
+                "startIpAddress": "0.0.0.0",
+                "endIpAddress": "255.255.255.255"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Sql/servers', format('srv-{0}', parameters('serverName')))]"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "storage-account",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "stgAcctName": {
+            "value": "[parameters('stgAcctName')]"
+          },
+          "blobContName": {
+            "value": "[parameters('blobContName')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.25.3.34343",
+              "templateHash": "9357199147474940717"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "defaultValue": "canadacentral",
+              "allowedValues": [
+                "canadacentral",
+                "canadaeast"
+              ],
+              "metadata": {
+                "description": "La région du déploiement"
+              }
+            },
+            "stgAcctName": {
+              "type": "string",
+              "metadata": {
+                "description": "Le nom du compte de stockage"
+              }
+            },
+            "blobContName": {
+              "type": "string",
+              "metadata": {
+                "description": "Le nom de conteneur blob"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Storage/storageAccounts",
+              "apiVersion": "2023-01-01",
+              "name": "[parameters('stgAcctName')]",
+              "location": "[parameters('location')]",
+              "kind": "StorageV2",
+              "sku": {
+                "name": "Standard_ZRS"
+              }
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/blobServices",
+              "apiVersion": "2023-01-01",
+              "name": "[format('{0}/{1}', parameters('stgAcctName'), 'default')]",
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('stgAcctName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+              "apiVersion": "2023-01-01",
+              "name": "[format('{0}/{1}/{2}', parameters('stgAcctName'), 'default', toLower(format('{0}space', parameters('blobContName'))))]",
+              "properties": {
+                "publicAccess": "None",
+                "metadata": {}
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', parameters('stgAcctName'), 'default')]"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
